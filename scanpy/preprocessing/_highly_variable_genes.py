@@ -449,7 +449,7 @@ def highly_variable_genes_seurat_v3(
 
         mean, var = _get_mean_var(adata[batch_info == b].X)
         not_const = var > 0
-        estimat_var = np.zeros(adata.shape[1])
+        estimat_var = np.zeros(adata.shape[1], dtype=np.float64)
 
         y = np.log10(var[not_const])
         x = np.log10(mean[not_const])
@@ -499,6 +499,7 @@ def highly_variable_genes_seurat_v3(
     df["variances_norm"] = np.mean(norm_gene_vars, axis=0)
     df["means"] = mean
     df["variances"] = var
+    df["regularized_std"] = reg_std
 
     df.sort_values(
         ["highly_variable_nbatches", "highly_variable_median_rank"],
@@ -526,11 +527,15 @@ def highly_variable_genes_seurat_v3(
             '    \'means\', float vector (adata.var)\n'
             '    \'variances\', float vector (adata.var)\n'
             '    \'variances_norm\', float vector (adata.var)'
+            '    \'regularized_std\', float vector (adata.var)'
         )
         adata.var['highly_variable'] = df['highly_variable'].values
         adata.var['means'] = df['means'].values
         adata.var['variances'] = df['variances'].values
         adata.var['variances_norm'] = df['variances_norm'].values.astype(
+            'float32', copy=False
+        )
+        adata.var['regularized_std'] = df['regularized_std'].values.astype(
             'float32', copy=False
         )
         if batch_key is not None:
