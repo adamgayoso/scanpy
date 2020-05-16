@@ -59,3 +59,28 @@ def test_scvi():
     assert adata.obsm['X_scvi'].shape == (n_samples * 2, n_latent)
     assert adata.obsm['X_scvi_denoised'].shape == adata.shape
     assert adata.obsm['X_scvi_sample_rate'].shape == adata.shape
+
+
+def test_totalvi():
+    n_samples = 4
+    n_genes = 7
+    batch1 = np.random.randint(1, 5, size=(n_samples, n_genes))
+    batch2 = np.random.randint(1, 5, size=(n_samples, n_genes))
+    ad1 = AnnData(batch1)
+    ad2 = AnnData(batch2)
+    adata = ad1.concatenate(ad2, batch_categories=['test1', 'test2'])
+    adata.obsm["protein_expression"] = adata.X_scvi
+    adata.uns["protein_names"] = np.arange(adata.shape[1])
+    n_latent = 20
+    sce.pp.totalvi(
+        adata,
+        use_cuda=False,
+        n_epochs=2,
+        n_latent=n_latent,
+        return_posterior=True,
+        batch_key='batch',
+    )
+    assert adata.obsm['X_totalvi'].shape == (n_samples * 2, n_latent)
+    assert adata.obsm['X_totalvi_denoised_genes'].shape == adata.shape
+    assert adata.obsm['X_totalvi_denoised_proteins'].shape == adata.shape
+    assert adata.obsm['X_totalvi_protein_prob_foreground'].shape == adata.shape
