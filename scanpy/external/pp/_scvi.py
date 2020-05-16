@@ -381,6 +381,7 @@ def totalvi(
         trainer_kwargs.update({'early_stopping_kwargs': 'auto'})
         frequency = 1
     else:
+        trainer_kwargs.update({'early_stopping_kwargs': None})
         frequency = None
 
     trainer = TotalTrainer(
