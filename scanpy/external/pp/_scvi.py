@@ -10,6 +10,7 @@ MIN_VERSION = "0.6.5"
 
 def _prepare_dataset(
     adata: AnnData,
+    layer: Optional[str] = None,
     subset_genes: Optional[Sequence[Union[int, str]]] = None,
     use_highly_variable_genes: bool = True,
     batch_key: Optional[str] = None,
@@ -31,7 +32,8 @@ def _prepare_dataset(
         else:
             assert np.all(X_subset.astype(int) == X_subset), norm_error
 
-    _check_count_matrix(adata.X)
+    X = adata.X if layer is None else adata.layers[layer]
+    _check_count_matrix(X)
 
     if subset_genes is not None:
         adata_subset = adata[:, subset_genes]
@@ -41,7 +43,8 @@ def _prepare_dataset(
         adata_subset = adata
 
     adata_subset = adata_subset.copy()
-
+    if layer is not None:
+        adata_subset.X = adata_subset.layers[layer]
     if batch_key is not None:
         codes, uniques = pd.factorize(adata_subset.obs[batch_key])
         adata_subset.obs['_tmp_scvi_batch'] = codes
@@ -62,6 +65,7 @@ def _prepare_dataset(
 
 def scvi(
     adata: AnnData,
+    layer: Optional[str] = None,
     n_hidden: int = 128,
     n_latent: int = 10,
     n_layers: int = 1,
@@ -102,6 +106,8 @@ def scvi(
     ----------
     adata
         An anndata file with `X` attribute of unnormalized count data
+    layer
+        Layer of `adata` to use as expression values.
     n_hidden
         Number of nodes per hidden layer
     n_latent
@@ -110,6 +116,7 @@ def scvi(
         Number of hidden layers used for encoder and decoder NNs
     dispersion
         One of the following
+
         * `'gene'` - dispersion parameter of NB is constant per gene across cells
         * `'gene-batch'` - dispersion can differ between different batches
         * `'gene-label'` - dispersion can differ between different labels
@@ -159,6 +166,19 @@ def scvi(
     `adata.uns['ldvae_loadings']` stores the per-gene weights in the linear decoder as a
     genes by n_latent matrix.
 
+    Examples
+    --------
+    >>> import scanpy as sc
+    >>> import scanpy.external as sce
+    >>> adata = sc.datasets.pbmc3k()
+    >>> adata.var_names_make_unique()
+    >>> adata.layers['counts'] = adata.X
+    >>> sc.pp.normalize_per_cell(adata)
+    >>> sc.pp.log1p(adata)
+    >>> sc.pp.highly_variable_genes(adata)
+    >>> posterior = sce.pp.scvi(adata, layer='counts', return_posterior=True)
+    >>> sc.pp.neighbors(adata, use_rep="X_scvi")
+    >>> sc.tl.umap(adata)
     """
 
     try:
@@ -175,6 +195,7 @@ def scvi(
 
     dataset = _prepare_dataset(
         adata,
+        layer=layer,
         subset_genes=subset_genes,
         use_highly_variable_genes=use_highly_variable_genes,
         batch_key=batch_key,
@@ -241,6 +262,7 @@ def scvi(
 
 def totalvi(
     adata: AnnData,
+    layer: Optional[str] = None,
     n_latent: int = 20,
     n_epochs: int = 500,
     n_hidden: int = 256,
@@ -276,6 +298,8 @@ def totalvi(
         `protein_expression` key in `.obsm` of cells by proteins count matrix and
         `protein_names` key in `.uns` that is 1d array of str with protein names
         Both `protein_expression` and `protein_names` are expected to be (:class:`~numpy.ndarray`)
+    layer
+        Layer of `adata` to use as expression values.
     n_latent
         Dimensionality of the latent space
     n_epochs
@@ -337,6 +361,7 @@ def totalvi(
 
     dataset = _prepare_dataset(
         adata,
+        layer=layer,
         subset_genes=subset_genes,
         use_highly_variable_genes=use_highly_variable_genes,
         batch_key=batch_key,
