@@ -379,6 +379,9 @@ def totalvi(
 
     if early_stopping is True:
         trainer_kwargs.update({'early_stopping_kwargs': 'auto'})
+        frequency = 1
+    else:
+        frequency = None
 
     trainer = TotalTrainer(
         model=vae,
@@ -386,7 +389,7 @@ def totalvi(
         use_cuda=use_cuda,
         train_size=train_size,
         test_size=1.0 - train_size,
-        frequency=1,
+        frequency=frequency,
         **trainer_kwargs,
     )
 

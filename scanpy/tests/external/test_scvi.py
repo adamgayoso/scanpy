@@ -1,6 +1,7 @@
 import pytest
 import sys
 import numpy as numpy
+import scanpy as sc
 import scanpy.external as sce
 import numpy as np
 
@@ -62,25 +63,18 @@ def test_scvi():
 
 
 def test_totalvi():
-    n_samples = 4
-    n_genes = 7
-    batch1 = np.random.randint(1, 5, size=(n_samples, n_genes))
-    batch2 = np.random.randint(1, 5, size=(n_samples, n_genes))
-    ad1 = AnnData(batch1)
-    ad2 = AnnData(batch2)
-    adata = ad1.concatenate(ad2, batch_categories=['test1', 'test2'])
-    adata.obsm["protein_expression"] = adata.X
-    adata.uns["protein_names"] = np.arange(adata.shape[1])
+    adata = sc.datasets.pbmc5k_cite_filtered()
     n_latent = 20
     sce.pp.totalvi(
         adata,
         use_cuda=False,
-        n_epochs=2,
+        n_epochs=1,
         n_latent=n_latent,
+        early_stopping=False,
+        train_size=0.1,
         return_posterior=True,
-        batch_key='batch',
     )
-    assert adata.obsm['X_totalvi'].shape == (n_samples * 2, n_latent)
+    assert adata.obsm['X_totalvi'].shape == (adata.shape[0], n_latent)
     assert adata.obsm['X_totalvi_denoised_genes'].shape == adata.shape
     assert adata.obsm['X_totalvi_denoised_proteins'].shape == adata.shape
     assert adata.obsm['X_totalvi_protein_prob_foreground'].shape == adata.shape
