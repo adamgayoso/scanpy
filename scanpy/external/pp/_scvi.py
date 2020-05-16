@@ -51,7 +51,7 @@ def _prepare_dataset(
 
     if prepare_protein:
         _check_count_matrix(adata_subset.obsm["protein_expression"])
-        mapping = {"protein_expression", "protein_names"}
+        mapping = {"protein_expression": "protein_names"}
     else:
         mapping = None
     dataset = AnnDatasetFromAnnData(
