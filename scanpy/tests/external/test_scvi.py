@@ -74,7 +74,15 @@ def test_totalvi():
         train_size=0.1,
         return_posterior=True,
     )
+    gene_shape = np.sum(adata.var.highly_variable)
+    pro_shape = len(adata.uns["protein_names"])
     assert adata.obsm['X_totalvi'].shape == (adata.shape[0], n_latent)
-    assert adata.obsm['X_totalvi_denoised_genes'].shape == adata.shape
-    assert adata.obsm['X_totalvi_denoised_proteins'].shape == adata.shape
-    assert adata.obsm['X_totalvi_protein_prob_foreground'].shape == adata.shape
+    assert adata.obsm['X_totalvi_denoised_genes'].shape == (adata.shape[0], gene_shape)
+    assert adata.obsm['X_totalvi_denoised_proteins'].shape == (
+        adata.shape[0],
+        pro_shape,
+    )
+    assert adata.obsm['X_totalvi_protein_prob_foreground'].shape == (
+        adata.shape[0],
+        pro_shape,
+    )
