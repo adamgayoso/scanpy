@@ -385,7 +385,7 @@ def totalvi(
 
     trainer = TotalTrainer(
         model=vae,
-        gene_dataset=dataset,
+        dataset=dataset,
         use_cuda=use_cuda,
         train_size=train_size,
         test_size=1.0 - train_size,
