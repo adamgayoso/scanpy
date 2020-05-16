@@ -162,6 +162,7 @@ def scvi(
     """
 
     try:
+        import scvi as sc
         from scvi.models import VAE, LDVAE
         from scvi.inference import UnsupervisedTrainer
     except ImportError:
@@ -169,7 +170,7 @@ def scvi(
             "Please install scvi package from https://github.com/YosefLab/scVI"
         )
 
-    if scvi.__version__ < MIN_VERSION:
+    if sc.__version__ < MIN_VERSION:
         raise ValueError("Please upgrade scvi via `pip install --upgrade scvi`")
 
     dataset = _prepare_dataset(
@@ -324,13 +325,14 @@ def totalvi(
     """
 
     try:
+        import scvi as sc
         from scvi.models import TOTALVI
         from scvi.inference import TotalPosterior, TotalTrainer
     except ImportError:
         raise ImportError(
             "Please install scvi package from https://github.com/YosefLab/scVI"
         )
-    if scvi.__version__ < MIN_VERSION:
+    if sc.__version__ < MIN_VERSION:
         raise ValueError("Please upgrade scvi via `pip install --upgrade scvi`")
 
     dataset = _prepare_dataset(
