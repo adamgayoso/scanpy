@@ -3,7 +3,9 @@ from typing import Optional
 
 import numpy as np
 import pandas as pd
+import scipy.sparse as sp_sparse
 from anndata import AnnData
+
 
 from .. import logging as logg
 from .._settings import settings, Verbosity
@@ -33,15 +35,19 @@ def _highly_variable_genes_single_batch(
     `highly_variable`, `means`, `dispersions`, and `dispersions_norm`.
     """
 
-    if n_top_genes is not None and not all(m is None for m in [
-        min_disp, max_disp, min_mean, max_mean
-    ]):
+    if n_top_genes is not None and not all(
+        m is None for m in [min_disp, max_disp, min_mean, max_mean]
+    ):
         logg.info('If you pass `n_top_genes`, all cutoffs are ignored.')
 
-    if min_disp is None: min_disp = 0.5
-    if min_mean is None: min_mean = 0.0125
-    if max_mean is None: max_mean = 3
-    if max_disp is None: max_disp = np.inf
+    if min_disp is None:
+        min_disp = 0.5
+    if min_mean is None:
+        min_mean = 0.0125
+    if max_mean is None:
+        max_mean = 3
+    if max_disp is None:
+        max_disp = np.inf
 
     X = adata.X
     if flavor == 'seurat':
@@ -79,41 +85,43 @@ def _highly_variable_genes_single_batch(
             )
         # Circumvent pandas 0.23 bug. Both sides of the assignment have dtype==float32,
         # but there’s still a dtype error without “.value”.
-        disp_std_bin[one_gene_per_bin.values] = disp_mean_bin[one_gene_per_bin.values].values
+        disp_std_bin[one_gene_per_bin.values] = disp_mean_bin[
+            one_gene_per_bin.values
+        ].values
         disp_mean_bin[one_gene_per_bin.values] = 0
         # actually do the normalization
         df['dispersions_norm'] = (
-            (
-                df['dispersions'].values  # use values here as index differs
-                - disp_mean_bin[df['mean_bin'].values].values
-            ) / disp_std_bin[df['mean_bin'].values].values
-        )
+            df['dispersions'].values  # use values here as index differs
+            - disp_mean_bin[df['mean_bin'].values].values
+        ) / disp_std_bin[df['mean_bin'].values].values
     elif flavor == 'cell_ranger':
         from statsmodels import robust
-        df['mean_bin'] = pd.cut(df['means'], np.r_[
-            -np.inf,
-            np.percentile(df['means'], np.arange(10, 105, 5)),
-            np.inf
-        ])
+
+        df['mean_bin'] = pd.cut(
+            df['means'],
+            np.r_[-np.inf, np.percentile(df['means'], np.arange(10, 105, 5)), np.inf],
+        )
         disp_grouped = df.groupby('mean_bin')['dispersions']
         disp_median_bin = disp_grouped.median()
         # the next line raises the warning: "Mean of empty slice"
         with warnings.catch_warnings():
             warnings.simplefilter('ignore')
             disp_mad_bin = disp_grouped.apply(robust.mad)
-            df['dispersions_norm'] = (df['dispersions'].values
-                - disp_median_bin[df['mean_bin'].values].values
-                ) / disp_mad_bin[df['mean_bin'].values].values
+            df['dispersions_norm'] = (
+                df['dispersions'].values - disp_median_bin[df['mean_bin'].values].values
+            ) / disp_mad_bin[df['mean_bin'].values].values
     else:
         raise ValueError('`flavor` needs to be "seurat" or "cell_ranger"')
     dispersion_norm = df['dispersions_norm'].values.astype('float32')
     if n_top_genes is not None:
         dispersion_norm = dispersion_norm[~np.isnan(dispersion_norm)]
-        dispersion_norm[::-1].sort()  # interestingly, np.argpartition is slightly slower
+        dispersion_norm[
+            ::-1
+        ].sort()  # interestingly, np.argpartition is slightly slower
         if n_top_genes > adata.n_vars:
             logg.info(f'`n_top_genes` > `adata.n_var`, returning all genes.')
             n_top_genes = adata.n_vars
-        disp_cut_off = dispersion_norm[n_top_genes-1]
+        disp_cut_off = dispersion_norm[n_top_genes - 1]
         gene_subset = np.nan_to_num(df['dispersions_norm'].values) >= disp_cut_off
         logg.debug(
             f'the {n_top_genes} top genes correspond to a '
@@ -121,11 +129,14 @@ def _highly_variable_genes_single_batch(
         )
     else:
         dispersion_norm[np.isnan(dispersion_norm)] = 0  # similar to Seurat
-        gene_subset = np.logical_and.reduce((
-            mean > min_mean, mean < max_mean,
-            dispersion_norm > min_disp,
-            dispersion_norm < max_disp,
-        ))
+        gene_subset = np.logical_and.reduce(
+            (
+                mean > min_mean,
+                mean < max_mean,
+                dispersion_norm > min_disp,
+                dispersion_norm < max_disp,
+            )
+        )
 
     df['highly_variable'] = gene_subset
     return df
@@ -223,13 +234,16 @@ def highly_variable_genes(
     if not isinstance(adata, AnnData):
         raise ValueError(
             '`pp.highly_variable_genes` expects an `AnnData` argument, '
-            'pass `inplace=False` if you want to return a `np.recarray`.')
+            'pass `inplace=False` if you want to return a `np.recarray`.'
+        )
 
     if batch_key is None:
         df = _highly_variable_genes_single_batch(
             adata,
-            min_disp=min_disp, max_disp=max_disp,
-            min_mean=min_mean, max_mean=max_mean,
+            min_disp=min_disp,
+            max_disp=max_disp,
+            min_mean=min_mean,
+            max_mean=max_mean,
             n_top_genes=n_top_genes,
             n_bins=n_bins,
             flavor=flavor,
@@ -246,12 +260,14 @@ def highly_variable_genes(
             with settings.verbosity.override(Verbosity.error):
                 filt = filter_genes(adata_subset, min_cells=1, inplace=False)[0]
 
-            adata_subset = adata_subset[:,filt]
+            adata_subset = adata_subset[:, filt]
 
             hvg = _highly_variable_genes_single_batch(
                 adata_subset,
-                min_disp=min_disp, max_disp=max_disp,
-                min_mean=min_mean, max_mean=max_mean,
+                min_disp=min_disp,
+                max_disp=max_disp,
+                min_mean=min_mean,
+                max_mean=max_mean,
                 n_top_genes=n_top_genes,
                 n_bins=n_bins,
                 flavor=flavor,
@@ -259,8 +275,7 @@ def highly_variable_genes(
 
             # Add 0 values for genes that were filtered out
             missing_hvg = pd.DataFrame(
-                np.zeros((np.sum(~filt), len(hvg.columns))),
-                columns=hvg.columns,
+                np.zeros((np.sum(~filt), len(hvg.columns))), columns=hvg.columns,
             )
             missing_hvg['highly_variable'] = missing_hvg['highly_variable'].astype(bool)
             missing_hvg['gene'] = gene_list[~filt]
@@ -275,21 +290,29 @@ def highly_variable_genes(
 
         df = pd.concat(df, axis=0)
         df['highly_variable'] = df['highly_variable'].astype(int)
-        df = df.groupby('gene').agg(dict(
-            means=np.nanmean,
-            dispersions=np.nanmean,
-            dispersions_norm=np.nanmean,
-            highly_variable=np.nansum,
-        ))
-        df.rename(columns=dict(highly_variable='highly_variable_nbatches'), inplace=True)
-        df['highly_variable_intersection'] = df['highly_variable_nbatches'] == len(batches)
+        df = df.groupby('gene').agg(
+            dict(
+                means=np.nanmean,
+                dispersions=np.nanmean,
+                dispersions_norm=np.nanmean,
+                highly_variable=np.nansum,
+            )
+        )
+        df.rename(
+            columns=dict(highly_variable='highly_variable_nbatches'), inplace=True
+        )
+        df['highly_variable_intersection'] = df['highly_variable_nbatches'] == len(
+            batches
+        )
 
         if n_top_genes is not None:
             # sort genes by how often they selected as hvg within each batch and
             # break ties with normalized dispersion across batches
             df.sort_values(
                 ['highly_variable_nbatches', 'dispersions_norm'],
-                ascending=False, na_position='last', inplace=True,
+                ascending=False,
+                na_position='last',
+                inplace=True,
             )
             df['highly_variable'] = False
             df.loc[:n_top_genes, 'highly_variable'] = True
@@ -298,11 +321,14 @@ def highly_variable_genes(
             df = df.loc[adata.var_names]
             dispersion_norm = df.dispersions_norm.values
             dispersion_norm[np.isnan(dispersion_norm)] = 0  # similar to Seurat
-            gene_subset = np.logical_and.reduce((
-                df.means > min_mean, df.means < max_mean,
-                df.dispersions_norm > min_disp,
-                df.dispersions_norm < max_disp,
-            ))
+            gene_subset = np.logical_and.reduce(
+                (
+                    df.means > min_mean,
+                    df.means < max_mean,
+                    df.dispersions_norm > min_disp,
+                    df.dispersions_norm < max_disp,
+                )
+            )
             df['highly_variable'] = gene_subset
 
     logg.info('    finished', time=start)
@@ -318,18 +344,24 @@ def highly_variable_genes(
         adata.var['highly_variable'] = df['highly_variable'].values
         adata.var['means'] = df['means'].values
         adata.var['dispersions'] = df['dispersions'].values
-        adata.var['dispersions_norm'] = df['dispersions_norm'].values.astype('float32', copy=False)
+        adata.var['dispersions_norm'] = df['dispersions_norm'].values.astype(
+            'float32', copy=False
+        )
         if batch_key is not None:
-            adata.var['highly_variable_nbatches'] = df['highly_variable_nbatches'].values
-            adata.var['highly_variable_intersection'] = df['highly_variable_intersection'].values
+            adata.var['highly_variable_nbatches'] = df[
+                'highly_variable_nbatches'
+            ].values
+            adata.var['highly_variable_intersection'] = df[
+                'highly_variable_intersection'
+            ].values
         if subset:
             adata._inplace_subset_var(df['highly_variable'].values)
     else:
         arrays = [
-             df['highly_variable'].values,
-             df['means'].values,
-             df['dispersions'].values,
-             df['dispersions_norm'].values.astype('float32', copy=False),
+            df['highly_variable'].values,
+            df['means'].values,
+            df['dispersions'].values,
+            df['dispersions_norm'].values.astype('float32', copy=False),
         ]
         dtypes = [
             ('highly_variable', np.bool_),
@@ -338,12 +370,211 @@ def highly_variable_genes(
             ('dispersions_norm', 'float32'),
         ]
         if batch_key is not None:
-            arrays.extend([
-                df['highly_variable_nbatches'].values,
-                df['highly_variable_intersection'].values,
-            ])
-            dtypes.append([
-                ('highly_variable_nbatches', int),
-                ('highly_variable_intersection', np.bool_),
-            ])
+            arrays.extend(
+                [
+                    df['highly_variable_nbatches'].values,
+                    df['highly_variable_intersection'].values,
+                ]
+            )
+            dtypes.append(
+                [
+                    ('highly_variable_nbatches', int),
+                    ('highly_variable_intersection', np.bool_),
+                ]
+            )
+        return np.rec.fromarrays(arrays, dtype=dtypes)
+
+
+def highly_variable_genes_seurat_v3(
+    adata: AnnData,
+    n_top_genes: int = 2000,
+    batch_key: Optional[str] = None,
+    span: Optional[float] = 0.3,
+    subset: bool = False,
+    inplace: bool = True,
+):
+    """\
+    Annotate highly variable genes [Stuart19]_.
+
+    Expects raw count data.
+
+    Computes for each gene a normalized variance. First, the data is standardized
+    (i.e., z-score normalization per feature) with a regularized standard deviation.
+    Next, the normalized variance is computed as the variance of each gene after the transformation.
+    Genes are ranked by the normalized variance.
+
+    For further implemenation details see https://www.overleaf.com/read/ckptrbgzzzpg
+
+    Parameters
+    ----------
+    adata
+        The annotated data matrix of shape `n_obs` × `n_vars`. Rows correspond
+        to cells and columns to genes.
+    n_top_genes
+        Number of highly-variable genes to keep.
+    batch_key
+        If specified, highly-variable genes are selected within each batch separately and merged.
+        This simple process avoids the selection of batch-specific genes and acts as a
+        lightweight batch correction method.
+    span
+        The fraction of the data (cells) used when estimating the variance in the loess model fit.
+    subset
+        Inplace subset to highly-variable genes if `True` otherwise merely indicate
+        highly variable genes.
+    inplace
+        Whether to place calculated metrics in `.var` or return them.
+
+    Returns
+    -------
+    Depending on `inplace` returns calculated metrics (:class:`~numpy.recarray`) or
+    updates `.var` with the following fields
+
+    highly_variable : bool
+        boolean indicator of highly-variable genes
+    **variances_norm**
+        normalized variance per gene, averaged in the case of multiple batches
+    highly_variable_nbatches : int
+        If batch_key is given, this denotes in how many batches genes are detected as HVG
+    highly_variable_intersection : bool
+        If batch_key is given, this denotes the genes that are highly variable in all batches
+    """
+
+    from skmisc.loess import loess
+
+    if batch_key is None:
+        batch_info = pd.Categorical(np.zeros(adata.shape[0], dtype=int))
+    else:
+        batch_info = adata.obs[batch_key]
+
+    norm_gene_vars = []
+    for b in np.unique(batch_info):
+
+        mean, var = _get_mean_var(adata[batch_info == b].X)
+        not_const = var > 0
+        estimat_var = np.zeros(adata.shape[1], dtype=np.float64)
+
+        y = np.log10(var[not_const])
+        x = np.log10(mean[not_const])
+        model = loess(x, y, span=span, degree=2)
+        model.fit()
+        estimat_var[not_const] = model.outputs.fitted_values
+        reg_std = np.sqrt(10 ** estimat_var)
+
+        batch_counts = adata[batch_info == b].X.astype(np.float64).copy()
+        # clip large values as in Seurat
+        N = np.sum(batch_info == b)
+        vmax = np.sqrt(N)
+        clip_val = reg_std * vmax + mean
+        if sp_sparse.issparse(batch_counts):
+            batch_counts = sp_sparse.csr_matrix(batch_counts)
+            mask = batch_counts.data > clip_val[batch_counts.indices]
+            batch_counts.data[mask] = clip_val[batch_counts.indices[mask]]
+        else:
+            clip_val_broad = np.broadcast_to(clip_val, batch_counts.shape)
+            np.putmask(
+                batch_counts, batch_counts > clip_val_broad, clip_val_broad,
+            )
+
+        if sp_sparse.issparse(batch_counts):
+            squared_batch_counts_sum = np.array(batch_counts.power(2).sum(axis=0))
+            batch_counts_sum = np.array(batch_counts.sum(axis=0))
+        else:
+            squared_batch_counts_sum = np.square(batch_counts).sum(axis=0)
+            batch_counts_sum = batch_counts.sum(axis=0)
+
+        norm_gene_var = (1 / ((N - 1) * np.square(reg_std))) * (
+            (N * np.square(mean))
+            + squared_batch_counts_sum
+            - 2 * batch_counts_sum * mean
+        )
+        norm_gene_vars.append(norm_gene_var.reshape(1, -1))
+
+    norm_gene_vars = np.concatenate(norm_gene_vars, axis=0)
+    # argsort twice gives ranks
+    ranked_norm_gene_vars = np.argsort(np.argsort(norm_gene_vars, axis=1), axis=1)
+    median_ranked = np.median(ranked_norm_gene_vars, axis=0)
+
+    num_batches_high_var = np.sum(
+        ranked_norm_gene_vars >= (adata.X.shape[1] - n_top_genes), axis=0
+    )
+    df = pd.DataFrame(index=np.array(adata.var_names))
+    df["highly_variable_nbatches"] = num_batches_high_var
+    df["highly_variable_median_rank"] = median_ranked
+    df["variances_norm"] = np.mean(norm_gene_vars, axis=0)
+    df["means"] = mean
+    df["variances"] = var
+    df["regularized_std"] = reg_std
+
+    df.sort_values(
+        ["highly_variable_nbatches", "highly_variable_median_rank"],
+        ascending=False,
+        na_position="last",
+        inplace=True,
+    )
+    df["highly_variable"] = False
+    df.loc[: int(n_top_genes), "highly_variable"] = True
+    df = df.loc[adata.var_names]
+
+    adata.var["highly_variable"] = df["highly_variable"].values
+    if batch_key is not None:
+        batches = adata.obs[batch_key].cat.categories
+        adata.var["highly_variable_nbatches"] = df["highly_variable_nbatches"].values
+        adata.var["highly_variable_intersection"] = df[
+            "highly_variable_nbatches"
+        ] == len(batches)
+    adata.var["highly_variable_median_rank"] = df["highly_variable_median_rank"].values
+
+    if inplace or subset:
+        logg.hint(
+            'added\n'
+            '    \'highly_variable\', boolean vector (adata.var)\n'
+            '    \'means\', float vector (adata.var)\n'
+            '    \'variances\', float vector (adata.var)\n'
+            '    \'variances_norm\', float vector (adata.var)'
+            '    \'regularized_std\', float vector (adata.var)'
+        )
+        adata.var['highly_variable'] = df['highly_variable'].values
+        adata.var['means'] = df['means'].values
+        adata.var['variances'] = df['variances'].values
+        adata.var['variances_norm'] = df['variances_norm'].values.astype(
+            'float32', copy=False
+        )
+        adata.var['regularized_std'] = df['regularized_std'].values.astype(
+            'float32', copy=False
+        )
+        if batch_key is not None:
+            adata.var['highly_variable_nbatches'] = df[
+                'highly_variable_nbatches'
+            ].values
+            adata.var['highly_variable_intersection'] = df[
+                'highly_variable_intersection'
+            ].values
+        if subset:
+            adata._inplace_subset_var(df['highly_variable'].values)
+    else:
+        arrays = [
+            df['highly_variable'].values,
+            df['means'].values,
+            df['variances'].values,
+            df['variances_norm'].values.astype('float32', copy=False),
+        ]
+        dtypes = [
+            ('highly_variable', np.bool_),
+            ('means', 'float32'),
+            ('variances', 'float32'),
+            ('variances_norm', 'float32'),
+        ]
+        if batch_key is not None:
+            arrays.extend(
+                [
+                    df['highly_variable_nbatches'].values,
+                    df['highly_variable_intersection'].values,
+                ]
+            )
+            dtypes.append(
+                [
+                    ('highly_variable_nbatches', int),
+                    ('highly_variable_intersection', np.bool_),
+                ]
+            )
         return np.rec.fromarrays(arrays, dtype=dtypes)
