@@ -69,7 +69,7 @@ def test_totalvi():
     ad1 = AnnData(batch1)
     ad2 = AnnData(batch2)
     adata = ad1.concatenate(ad2, batch_categories=['test1', 'test2'])
-    adata.obsm["protein_expression"] = adata.X_scvi
+    adata.obsm["protein_expression"] = adata.X
     adata.uns["protein_names"] = np.arange(adata.shape[1])
     n_latent = 20
     sce.pp.totalvi(
