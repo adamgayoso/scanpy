@@ -6,7 +6,7 @@ from typing import Iterable, Union, Optional
 import numpy as np
 import pandas as pd
 from anndata import AnnData
-from scipy.sparse import issparse
+from scipy.sparse import issparse, vstack
 
 from .. import _utils
 from .. import logging as logg
@@ -14,7 +14,7 @@ from ..preprocessing._simple import _get_mean_var
 from .._compat import Literal
 
 
-_Method = Literal['logreg', 't-test', 'wilcoxon', 't-test_overestim_var']
+_Method = Optional[Literal['logreg', 't-test', 'wilcoxon', 't-test_overestim_var']]
 _CorrMethod = Literal['benjamini-hochberg', 'bonferroni']
 
 
@@ -236,11 +236,13 @@ class _RankGenes:
 
                 # Calculate rank sums for each chunk for the current mask
                 for ranks, left, right in _ranks(self.X, mask, mask_rest):
-                    scores[left:right] = np.sum(ranks.loc[0:n_active, :])
+                    scores[left:right] = np.sum(ranks.iloc[0:n_active, :])
 
-                scores = (scores - (n_active * ((n_active + m_active + 1) / 2))) / sqrt(
-                    (n_active * m_active / 12 * (n_active + m_active + 1))
-                )
+                std_dev = sqrt((n_active * m_active / 12 * (n_active + m_active + 1)))
+
+                scores = (
+                    scores - (n_active * ((n_active + m_active + 1) / 2))
+                ) / std_dev
                 scores[np.isnan(scores)] = 0
                 pvals = 2 * stats.distributions.norm.sf(np.abs(scores))
 
@@ -255,14 +257,16 @@ class _RankGenes:
             for ranks, left, right in _ranks(self.X):
                 # sum up adjusted_ranks to calculate W_m,n
                 for imask, mask in enumerate(self.groups_masks):
-                    scores[imask, left:right] = np.sum(ranks.loc[mask, :])
+                    scores[imask, left:right] = np.sum(ranks.iloc[mask, :])
 
             for group_index, mask in enumerate(self.groups_masks):
                 n_active = np.count_nonzero(mask)
 
+                std_dev = sqrt((n_active * (n_cells - n_active) / 12 * (n_cells + 1)))
+
                 scores[group_index, :] = (
                     scores[group_index, :] - (n_active * (n_cells + 1) / 2)
-                ) / sqrt((n_active * (n_cells - n_active) / 12 * (n_cells + 1)))
+                ) / std_dev
                 scores[np.isnan(scores)] = 0
                 pvals = 2 * stats.distributions.norm.sf(np.abs(scores[group_index, :]))
 
@@ -301,6 +305,8 @@ class _RankGenes:
             generate_test_results = self.wilcoxon()
         elif method == 'logreg':
             generate_test_results = self.logreg(**kwds)
+
+        self.stats = None
 
         for group_index, scores, pvals in generate_test_results:
             group_name = str(self.groups_order[group_index])
@@ -364,7 +370,7 @@ def rank_genes_groups(
     pts: bool = False,
     key_added: Optional[str] = None,
     copy: bool = False,
-    method: _Method = 't-test',
+    method: _Method = None,
     corr_method: _CorrMethod = 'benjamini-hochberg',
     layer: Optional[str] = None,
     **kwds,
@@ -455,9 +461,11 @@ def rank_genes_groups(
     # to visualize the results
     >>> sc.pl.rank_genes_groups(adata)
     """
-    logg.warning(
-        "Default of the method has been changed to 't-test' from 't-test_overestim_var'"
-    )
+    if method is None:
+        logg.warning(
+            "Default of the method has been changed to 't-test' from 't-test_overestim_var'"
+        )
+        method = 't-test'
 
     if 'only_positive' in kwds:
         rankby_abs = not kwds.pop('only_positive')  # backwards compat
@@ -529,7 +537,7 @@ def rank_genes_groups(
     test_obj.stats.columns = test_obj.stats.columns.swaplevel()
 
     dtypes = {
-        'names': 'U50',
+        'names': 'O',
         'scores': 'float32',
         'logfoldchanges': 'float32',
         'pvals': 'float64',
